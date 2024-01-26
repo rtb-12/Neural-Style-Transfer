@@ -1,238 +1,152 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
+from torchvision import models,transforms
 import torch.optim as optim
-
 from PIL import Image
+from io import BytesIO
+import matplotlib.pyplot as plt
+import numpy as np
+import os 
+from scipy.ndimage import binary_erosion, binary_dilation
+from skimage.exposure import cumulative_distribution
+from rembg import remove
 
-import torchvision.transforms as transforms
-from torchvision.models import vgg19, VGG19_Weights
+"""LOADING MODEL"""
+
+vgg=models.vgg19(pretrained=True).features
+
+for parameter in vgg.parameters():
+    parameter.requires_grad_(False)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-torch.set_default_device(device)
 
-# desired size of the output image
-imsize = 512 if torch.cuda.is_available() else 128  # use small size if no GPU
+vgg.to(device)
 
-loader = transforms.Compose([
-    transforms.Resize(imsize),  # scale imported image
-    transforms.ToTensor()])  # transform it into a torch tensor
+def imageLoader(img,size):
+  img_transform = transforms.Compose([
+                        transforms.Resize(size),
+                        transforms.ToTensor(),
+                        transforms.Normalize((0.485, 0.456, 0.406),
+                                             (0.229, 0.224, 0.225))])
+  img=img_transform(img).unsqueeze(0)
+  return img
 
-def image_loader(image_name):
-    image = Image.open(image_name)
-    # fake batch dimension required to fit network's input dimensions
-    image = loader(image).unsqueeze(0)
-    return image.to(device, torch.float)
+def imageUnLoader(tensor):
+    image = tensor.to("cpu").clone().detach()
+    image = image.numpy().squeeze()
+    image = image.transpose(1,2,0)
+    image = image * np.array((0.229, 0.224, 0.225)) + np.array((0.485, 0.456, 0.406))
+    image = image.clip(0, 1)
+    return image
 
+"""Defining Feature Map Extractor"""
+def featureMapExtractor(image,model,layers):
+  if layers=="style":
+    layers=["1", "6", "11", "20", "29"]
 
-class ContentLoss(nn.Module):
+  if layers=="content":
+    layers= ["22"]
 
-    def __init__(self, target,):
-        super(ContentLoss, self).__init__()
-        # we 'detach' the target content from the tree used
-        # to dynamically compute the gradient: this is a stated value,
-        # not a variable. Otherwise the forward method of the criterion
-        # will throw an error.
-        self.target = target.detach()
-
-    def forward(self, input):
-        self.loss = F.mse_loss(input, self.target)
-        return input
-
-def gram_matrix(input):
-    a, b, c, d = input.size()  # a=batch size(=1)
-    # b=number of feature maps
-    # (c,d)=dimensions of a f. map (N=c*d)
-
-    features = input.view(a * b, c * d)  # resize F_XL into \hat F_XL
-
-    G = torch.mm(features, features.t())  # compute the gram product
-
-    # we 'normalize' the values of the gram matrix
-    # by dividing by the number of element in each feature maps.
-    return G.div(a * b * c * d)
+  if layers=="generated":
+    layers=["22","1", "6", "11", "20", "29"]
 
 
-class StyleLoss(nn.Module):
+  features={}
+  x=image
+  for name, layer in model._modules.items():
+    if isinstance(layer, nn.ReLU):
+        x = F.relu(x, inplace=False)
+    elif isinstance(layer, nn.MaxPool2d):
+        x = nn.AvgPool2d(2, 2)(x)
+    else:
+        x = layer(x)
 
-    def __init__(self, target_feature):
-        super(StyleLoss, self).__init__()
-        self.target = gram_matrix(target_feature).detach()
+    if name in layers:
+        features[name] = x
+  return features
 
-    def forward(self, input):
-        G = gram_matrix(input)
-        self.loss = F.mse_loss(G, self.target)
-        return input
+"""Defining GramMatrix"""
+def gramMatrix(tensor):
+  b,d,h,w=tensor.size()
 
-cnn = vgg19(weights=VGG19_Weights.DEFAULT).features.eval()
-cnn_normalization_mean = torch.tensor([0.485, 0.456, 0.406])
-cnn_normalization_std = torch.tensor([0.229, 0.224, 0.225])
+  tensor=tensor.view(b*d,h*w)
 
-# create a module to normalize input image so we can easily put it in a
-# ``nn.Sequential``
-class Normalization(nn.Module):
-    def __init__(self, mean, std):
-        super(Normalization, self).__init__()
-        # .view the mean and std to make them [C x 1 x 1] so that they can
-        # directly work with image Tensor of shape [B x C x H x W].
-        # B is batch size. C is number of channels. H is height and W is width.
-        self.mean = torch.tensor(mean).view(-1, 1, 1)
-        self.std = torch.tensor(std).view(-1, 1, 1)
+  gram = torch.mm(tensor, tensor.t())
 
-    def forward(self, img):
-        # normalize ``img``
-        return (img - self.mean) / self.std
+  return gram
 
-# desired depth layers to compute style/content losses :
-content_layers_default = ['conv_4']
-style_layers_default = ['conv_1', 'conv_2', 'conv_3', 'conv_4', 'conv_5']
+def style_transfer(content_img, style_img1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=500, show_iter=100):
+    print("style_transfer initiated")
+    size = 256  
+    content = imageLoader(content_img, size).to(device)
+    style1 = imageLoader(style_img1, size).to(device)
+    style2 = imageLoader(style_img2, size).to(device) if style_img2 else None
 
-def get_style_model_and_losses(cnn, normalization_mean, normalization_std,
-                               style_img, content_img,
-                               content_layers=content_layers_default,
-                               style_layers=style_layers_default):
-    # normalization module
-    normalization = Normalization(normalization_mean, normalization_std)
+    imgs_tensor = [content, style1, style2]
+    content, style1, style2 = imgs_tensor
 
-    # just in order to have an iterable access to or list of content/style
-    # losses
-    content_losses = []
-    style_losses = []
+    content_fms = featureMapExtractor(content, vgg, "content")
+    style_fms1 = featureMapExtractor(style1, vgg, "style")
+    style_gram1 = {layer: gramMatrix(style_fms1[layer]) for layer in style_fms1}
 
-    # assuming that ``cnn`` is a ``nn.Sequential``, so we make a new ``nn.Sequential``
-    # to put in modules that are supposed to be activated sequentially
-    model = nn.Sequential(normalization)
+    if style2 is not None:
+        style_fms2 = featureMapExtractor(style2, vgg, "style")
+        style_gram2 = {layer: gramMatrix(style_fms2[layer]) for layer in style_fms2}
+    else:
+        style_gram2 = style_gram1
 
-    i = 0  # increment every time we see a conv
-    for layer in cnn.children():
-        if isinstance(layer, nn.Conv2d):
+    generated_img = content.clone().requires_grad_(True).to(device)
+
+    style_weights = [1e3/n**2 for n in [64, 128, 256, 512, 512]]
+    style_layers = ["1", "6", "11", "20", "29"]
+
+    optimizer = optim.Adam(params=[generated_img], lr=0.003)
+
+    step = 0
+    while step <= num_of_steps:
+        generated_img_features = featureMapExtractor(generated_img, vgg, "generated")
+
+        content_loss = torch.mean((generated_img_features["22"] - content_fms["22"])**2)
+
+        style_loss1 = 0
+        i = 0
+        for layer in style_layers:
+            generated_img_feature = generated_img_features[layer]
+            generated_img_gram = gramMatrix(generated_img_feature)
+            _, d, h, w = generated_img_feature.shape
+            style_img_gram1 = style_gram1[layer]
+            layer_style_loss = style_weights[i] * torch.mean((generated_img_gram - style_img_gram1)**2)
+            style_loss1 += layer_style_loss / (d * h * w)
             i += 1
-            name = 'conv_{}'.format(i)
-        elif isinstance(layer, nn.ReLU):
-            name = 'relu_{}'.format(i)
-            # The in-place version doesn't play very nicely with the ``ContentLoss``
-            # and ``StyleLoss`` we insert below. So we replace with out-of-place
-            # ones here.
-            layer = nn.ReLU(inplace=False)
-        elif isinstance(layer, nn.MaxPool2d):
-            name = 'pool_{}'.format(i)
-        elif isinstance(layer, nn.BatchNorm2d):
-            name = 'bn_{}'.format(i)
-        else:
-            raise RuntimeError('Unrecognized layer: {}'.format(layer.__class__.__name__))
 
-        model.add_module(name, layer)
+        style_loss2 = 0
+        i = 0
+        for layer in style_layers:
+            generated_img_feature = generated_img_features[layer]
+            generated_img_gram = gramMatrix(generated_img_feature)
+            _, d, h, w = generated_img_feature.shape
+            style_img_gram2 = style_gram2[layer]
+            layer_style_loss = style_weights[i] * torch.mean((generated_img_gram - style_img_gram2)**2)
+            style_loss2 += layer_style_loss / (d * h * w)
+            i += 1
 
-        if name in content_layers:
-            # add content loss:
-            target = model(content_img).detach()
-            content_loss = ContentLoss(target)
-            model.add_module("content_loss_{}".format(i), content_loss)
-            content_losses.append(content_loss)
+        total_loss = alpha * content_loss + beta * (gamma*style_loss1 + (1-gamma)*style_loss2)
 
-        if name in style_layers:
-            # add style loss:
-            target_feature = model(style_img).detach()
-            style_loss = StyleLoss(target_feature)
-            model.add_module("style_loss_{}".format(i), style_loss)
-            style_losses.append(style_loss)
+        optimizer.zero_grad()
+        total_loss.backward()
+        optimizer.step()
 
-    # now we trim off the layers after the last content and style losses
-    for i in range(len(model) - 1, -1, -1):
-        if isinstance(model[i], ContentLoss) or isinstance(model[i], StyleLoss):
-            break
+        if step % show_iter == 0:
+            print('Step {}: Total loss: {:.4f}'.format(step, total_loss.item()))
+        
 
-    model = model[:(i + 1)]
+        step += 1
+    
 
-    return model, style_losses, content_losses
-
-
-def get_input_optimizer(input_img):
-    # this line to show that input is a parameter that requires a gradient
-    optimizer = optim.LBFGS([input_img])
-    return optimizer
-
-def run_style_transfer(cnn, normalization_mean, normalization_std,
-                       content_img, style_img, input_img, num_steps=1500,
-                       style_weight=1000000, content_weight=1):
-    """Run the style transfer."""
-    print('Building the style transfer model..')
-    model, style_losses, content_losses = get_style_model_and_losses(cnn,
-        normalization_mean, normalization_std, style_img, content_img)
-
-    # We want to optimize the input and not the model parameters so we
-    # update all the requires_grad fields accordingly
-    input_img.requires_grad_(True)
-    # We also put the model in evaluation mode, so that specific layers
-    # such as dropout or batch normalization layers behave correctly.
-    model.eval()
-    model.requires_grad_(False)
-
-    optimizer = get_input_optimizer(input_img)
-
-    print('Optimizing..')
-    run = [0]
-    while run[0] <= num_steps:
-
-        def closure():
-            # correct the values of updated input image
-            with torch.no_grad():
-                input_img.clamp_(0, 1)
-
-            optimizer.zero_grad()
-            model(input_img)
-            style_score = 0
-            content_score = 0
-
-            for sl in style_losses:
-                style_score += sl.loss
-            for cl in content_losses:
-                content_score += cl.loss
-
-            style_score *= style_weight
-            content_score *= content_weight
-
-            loss = style_score + content_score
-            loss.backward()
-
-            run[0] += 1
-            if run[0] % 50 == 0:
-                print("run {}:".format(run))
-                print('Style Loss : {:4f} Content Loss: {:4f}'.format(
-                    style_score.item(), content_score.item()))
-                print()
-            return style_score + content_score
-
-        optimizer.step(closure)
-
-    # a last correction...
-    with torch.no_grad():
-        input_img.clamp_(0, 1)
-
-    return input_img
-
-def style_transfer(content_image_path, style_image_path):
-    content_img = Image.open(content_image_path)
-    style_img = Image.open(style_image_path)
-
-    # Resize content and style images to have the same dimensions
-    content_img = content_img.resize((256, 256))
-    style_img = style_img.resize((256,256))
-
-    content_tensor = transforms.ToTensor()(content_img).unsqueeze(0).to(device)
-    style_tensor = transforms.ToTensor()(style_img).unsqueeze(0).to(device)
-    input_tensor = content_tensor.clone()
-
-    output = run_style_transfer(cnn, cnn_normalization_mean, cnn_normalization_std,
-                                content_tensor, style_tensor, input_tensor)
-
-    output_image = transforms.ToPILImage()(output.cpu().squeeze(0))
-    output_image.save(r"D:\Neural-Style-Transfer\app\static\Styled_Background_image_path.jpg")
-
+    return generated_img
 #extract background image
-from rembg import remove
-import numpy as np
-
 def extract_background_foreground(input_path):
     # Load input image
     input_image = Image.open(input_path)
@@ -267,17 +181,10 @@ def extract_background_foreground(input_path):
     print("Extracted subject.")
 
     # Save output images
-    background.save(r"D:\Neural-Style-Transfer\app\static\output_background_path.png")
-    subject.save(r"D:\Neural-Style-Transfer\app\static\output_foreground_path.png")
+    
+    background.save(os.path.join(static_dir,"output_background_path.png"))
+    subject.save(os.path.join(static_dir,"output_foreground_path.png"))
     print("Output images saved.")
-
-
-#merge background  and foreground
-from PIL import Image
-import numpy as np
-from scipy.ndimage import binary_erosion, binary_dilation
-
-
 def remove_background_advanced(image):
     # Convert the image to RGBA mode
     image = image.convert("RGBA")
@@ -302,7 +209,7 @@ def remove_background_advanced(image):
     # Convert the numpy array back to a PIL image
     image = Image.fromarray(data, 'RGBA')
     return image
-
+#merge background  and foreground
 def merge_images(background_path, foreground_path):
     # Open the background and foreground images
     background = Image.open(background_path)
@@ -325,99 +232,268 @@ def merge_images(background_path, foreground_path):
     merged_image = merged_image.convert('RGB')
 
     # Save the merged image
-    merged_image.save(r"D:\Neural-Style-Transfer\app\static\final_image.png")
+    merged_image.save(os.path.join(static_dir,"final_image.png"))
+
+#color histogram mathcing
+def getCDF(image):
+    cdf, bins = cumulative_distribution(image)
+    cdf = np.insert(cdf, 0, [0] * bins[0])
+    cdf = np.append(cdf, [1] * (255 - bins[-1]))
+    return cdf
+
+def histMatch(cdfInput, cdfTemplate, imageInput):
+    pixelValues = np.arange(256)
+    new_pixels = np.interp(cdfInput, cdfTemplate, pixelValues)
+    imageMatch = (np.reshape(new_pixels[imageInput.ravel()], imageInput.shape)).astype(np.uint8)
+    return imageMatch
+
+def histogram_matching(content_image, style_image):
+    # Convert PIL Image to NumPy array
+    content_array = np.array(content_image)
+    style_array = np.array(style_image)
+
+    # create a matrix for the result
+    result_image = np.zeros_like(content_array).astype(np.uint8)
+
+    # cdf and histogram matching
+    for channel in range(3):
+        cdf_content = getCDF(content_array[:, :, channel])
+        cdf_style = getCDF(style_array[:, :, channel])
+        result_image[:, :, channel] = histMatch(cdf_content, cdf_style, content_array[:, :, channel])
+
+    return result_image
 
 
 
+#high res transfer:
+def high_res_transfer(content_img, style_img1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=25, show_iter=5):
+    print("high_res_transfer initiated")
+    image_hr = 1024
 
-def BackgroundStyle(content_image_path, style_image_path, output_image_path, output_background_image_path, output_foreground_image_path):
-    # Extract background and foreground
-    extract_background_foreground(content_image_path, output_background_image_path, output_foreground_image_path)
-    # Perform style transfer
-    style_transfer(content_image_path, style_image_path, output_image_path)
-    # Merge background and foreground
-    merge_images(output_image_path, output_foreground_image_path, output_image_path)
-    return output_image_path
+    # Assuming device is defined elsewhere
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    content = imageLoader(content_img, image_hr).to(device)
+    style1 = imageLoader(style_img1, image_hr).to(device)
+    style2 = imageLoader(style_img2, image_hr).to(device) if style_img2 else None
 
+    imgs_tensor = [content, style1, style2]
+    content, style1, style2 = imgs_tensor
 
+    content_fms = featureMapExtractor(content, vgg, "content")
+    style_fms1 = featureMapExtractor(style1, vgg, "style")
+    style_gram1 = {layer: gramMatrix(style_fms1[layer]) for layer in style_fms1}
+
+    if style2 is not None:
+        style_fms2 = featureMapExtractor(style2, vgg, "style")
+        style_gram2 = {layer: gramMatrix(style_fms2[layer]) for layer in style_fms2}
+    else:
+        style_gram2 = style_gram1
+
+    generated_img_hr = content.clone().requires_grad_(True).to(device)
+
+    style_weights = [1e12 / n**2 for n in [64, 128, 256, 512, 512]]
+    style_layers = ["1", "6", "11", "20", "29"]
+
+    optimizer = optim.Adam(params=[generated_img_hr], lr=0.003)
+
+    step = 0
+    while step <= num_of_steps:
+        generated_img_hr_features = featureMapExtractor(generated_img_hr, vgg, "generated")
+
+        content_loss = torch.mean((generated_img_hr_features["22"] - content_fms["22"])**2)
+
+        style_loss1 = 0
+        style_loss2 = 0
+
+        i = 0
+        for layer in style_layers:
+            generated_img_hr_feature = generated_img_hr_features[layer]
+            generated_img_hr_gram = gramMatrix(generated_img_hr_feature)
+            _, d, h, w = generated_img_hr_feature.shape
+            style_img_gram1 = style_gram1[layer]
+            layer_style_loss1 = style_weights[i] * torch.mean((generated_img_hr_gram - style_img_gram1)**2)
+            style_loss1 += layer_style_loss1 / (d * h * w)
+            i += 1
+
+        i = 0
+        for layer in style_layers:
+            generated_img_hr_feature = generated_img_hr_features[layer]
+            generated_img_hr_gram = gramMatrix(generated_img_hr_feature)
+            _, d, h, w = generated_img_hr_feature.shape
+            style_img_gram2 = style_gram2[layer]
+            layer_style_loss2 = style_weights[i] * torch.mean((generated_img_hr_gram - style_img_gram2)**2)
+            style_loss2 += layer_style_loss2 / (d * h * w)
+            i += 1
+
+        total_loss = alpha * content_loss + beta * (gamma * style_loss1 + (1 - gamma) * style_loss2)
+
+        optimizer.zero_grad()
+        total_loss.backward()
+        optimizer.step()
+
+        if step % show_iter == 0:
+            print('Step {}: Total loss: {:.4f}'.format(step, total_loss.item()))
+
+        step += 1
+
+    generated_out_img_hr = imageUnLoader(generated_img_hr)
+
+    # Ensure the data type is uint8
+    generated_out_img_hr = (generated_out_img_hr * 255).astype(np.uint8)
+
+    # Create the PIL Image object
+    generated_out_img_hr_pil = Image.fromarray(generated_out_img_hr)
+
+    # Save the image as a file
+    generated_out_img_hr_pil.save(os.path.join(static_dir,"generated_image_hr.png"))
+
+#flask app
 from flask import Flask, render_template, request, redirect, url_for,send_file
 
-
 app = Flask(__name__)
-
-def perform_style_transfer(content_image, style_image):
-
-    # Resize content and style images to have the same dimensions
-    content_image = content_image.resize((256,256))
-    style_image = style_image.resize((256,256))
-
-    content_img = transforms.ToTensor()(content_image).unsqueeze(0).to(device)
-    style_img = transforms.ToTensor()(style_image).unsqueeze(0).to(device)
-    input_img = content_img.clone()
-
-    output = run_style_transfer(cnn, cnn_normalization_mean, cnn_normalization_std,
-                                content_img, style_img, input_img)
-
-    output_img = transforms.ToPILImage()(output.cpu().squeeze(0))
-    return output_img
-
+static_dir = os.path.join(app.root_path, 'static')
 
 @app.route("/", methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        if 'content_image' not in request.files or 'style_image' not in request.files:
+        if 'content_image' not in request.files or 'style_image1' not in request.files:
             return redirect(request.url)
 
-        content_file = request.files['content_image']
-        style_file = request.files['style_image']
+        content_image = request.files['content_image']
+        style_image1 = request.files['style_image1']
 
-        content_image = Image.open(content_file).convert('RGB')
-        style_image = Image.open(style_file).convert('RGB')
 
-        generated_image = perform_style_transfer(content_image, style_image)
-        generated_image.save(r"D:\Neural-Style-Transfer\app\static\generated.jpg")  # Save generated image
+        content_image = Image.open(content_image).convert('RGB')
+        style_image1 = Image.open(style_image1).convert('RGB')
+
+        generated_image = style_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
+        generated_out_img=imageUnLoader(generated_image)
+        
+        # Ensure the data type is uint8
+        generated_out_img = (generated_out_img * 255).astype(np.uint8)
+
+        # Create the PIL Image object
+        generated_out_img_pil = Image.fromarray(generated_out_img)
+
+        generated_out_img_pil.save(os.path.join(static_dir,"generated.jpg"))  # Save generated image
         print("got requested image")
         return redirect(url_for('get_generated_image'))
 
     return render_template('index.html')
 
 @app.route('/background_style_transfer', methods=['POST'])
+
 def background_style_transfer():
-    if 'content_image' not in request.files or 'style_image' not in request.files:
+    if 'content_image' not in request.files or 'style_image1' not in request.files:
         return redirect(request.url)
 
     content_file = request.files['content_image']
-    style_file = request.files['style_image']
+    style_file = request.files['style_image1']
 
     # Save uploaded images to temporary files
-    content_temp_path = r"D:\Neural-Style-Transfer\app\static\content_temp.jpg"
-    style_temp_path = r"D:\Neural-Style-Transfer\app\static\style_temp.jpg"
-    
+    content_temp_path = os.path.join(static_dir,"content_temp.jpg")
+    style_temp_path = os.path.join(static_dir,"style_temp.jpg")
+    background_img=os.path.join(static_dir,"output_background_path.png")
+
     content_file.save(content_temp_path)
     style_file.save(style_temp_path)
 
     # Load uploaded images as PIL Image objects
     content_image = Image.open(content_temp_path).convert('RGB')
-    style_image = Image.open(style_temp_path).convert('RGB')
+    style_image1 = Image.open(style_temp_path).convert('RGB')
+    background_img = Image.open(background_img)
 
     # Perform background extraction and style transfer
     extract_background_foreground(content_temp_path)
-    style_transfer(content_temp_path, style_temp_path)
+    
+    background_style=style_transfer(background_img,style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
+    background_style=imageUnLoader(background_style)
+    # Ensure the data type is uint8
+    background_style = (background_style * 255).astype(np.uint8)
+    background_style_pil=Image.fromarray(background_style)
+    background_style_pil.save(os.path.join(static_dir,"Styled_Background_image_path.jpg"))
 
     # Merge background and foreground images
-    merge_images( r"D:\Neural-Style-Transfer\app\static\Styled_Background_image_path.jpg",  r"D:\Neural-Style-Transfer\app\static\output_foreground_path.png")
+    merge_images( os.path.join(static_dir,"Styled_Background_image_path.jpg"),  os.path.join(static_dir,"output_foreground_path.png"))
     print("got requested imageB")
     return redirect(url_for('get_generated_background_image'))
+
+
+@app.route("/style_transfer_color_preserve", methods=['POST'])
+def style_transfer_color_preserve():
+    if 'content_image' not in request.files or 'style_image1' not in request.files:
+        return redirect(request.url)
+
+    content_file = request.files['content_image']
+    style_file1 = request.files['style_image1']
+
+    # Load uploaded images as PIL Image objects
+    content_image = Image.open(content_file).convert('RGB')
+    style_image1 = Image.open(style_file1).convert('RGB')
+
+    # Perform color-preserving style transfer
+    generated_style_color_preserve =histogram_matching(content_image, style_image1)
+    generated_style_color_preserve_pil = Image.fromarray(generated_style_color_preserve)
+    # generated_style_color_preserve_pil.save(os.path.join(static_dir,"histogramMatch_style_img.jpeg"))
     
+    style_transfer_color_preserve=style_transfer(content_image,generated_style_color_preserve_pil, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
+    
+    style_transfer_color_preserve=imageUnLoader(style_transfer_color_preserve)
+    # Ensure the data type is uint8
+    style_transfer_color_preserve=(style_transfer_color_preserve * 255).astype(np.uint8)
+    # Create the PIL Image object
+    style_transfer_color_preserve_pil=Image.fromarray(style_transfer_color_preserve)
+    style_transfer_color_preserve_pil.save(os.path.join(static_dir,"style_transfer_color_preserve.jpg"))  # Save generated image
+    print("got requested image")
+    return redirect(url_for('get_generated_image_color_preserve'))
+
+
+
+@app.route("/high_resolution_style_transfer", methods=['POST'])
+def high_resolution_style_transfer():
+        print("high resolution style transfer initiated")
+        if 'content_image' not in request.files or 'style_image1' not in request.files:
+            return redirect(request.url)
+
+        content_image = request.files['content_image']
+        style_image1 = request.files['style_image1']
+
+
+        content_image = Image.open(content_image).convert('RGB')
+        style_image1 = Image.open(style_image1).convert('RGB')
+
+        generated_image = style_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
+        generated_out_img=imageUnLoader(generated_image)
+        
+        # Ensure the data type is uint8
+        generated_out_img = (generated_out_img * 255).astype(np.uint8)
+
+        # Create the PIL Image object
+        generated_out_img_pil = Image.fromarray(generated_out_img)
+
+        generated_out_img_pil.save(os.path.join(static_dir,"generated.jpg"))
+
+        content_image = Image.open(os.path.join(static_dir,"generated.jpg")).convert('RGB')
+        hi_res_img=high_res_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=20, show_iter=5)
+        return redirect(url_for('get_generated_image_high_res'))
+
+
+@app.route('/generated_image_high_res')
+def get_generated_image_high_res():
+    return send_file(os.path.join(static_dir, "generated_image_hr.png"), mimetype='image/png')
+
+@app.route('/generated_image_color_preserve')
+def get_generated_image_color_preserve():
+    return send_file(os.path.join(static_dir, "style_transfer_color_preserve.jpg"), mimetype='image/jpg')   
 
 @app.route('/generated_background_image')
 def get_generated_background_image():
-    return send_file( r"D:\Neural-Style-Transfer\app\static\final_image.png", mimetype='image/jpg')
+    return send_file( os.path.join(static_dir,"final_image.png"), mimetype='image/jpg')
 
 @app.route('/generated_image')
 def get_generated_image():
-    return send_file(r"D:\Neural-Style-Transfer\app\static\generated.jpg", mimetype='image/jpg')
+    return send_file(os.path.join(static_dir,"generated.jpg"), mimetype='image/jpg')
 
 if __name__ == "__main__":
     app.run(debug=True)
