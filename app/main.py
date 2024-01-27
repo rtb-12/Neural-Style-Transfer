@@ -12,6 +12,12 @@ import os
 from scipy.ndimage import binary_erosion, binary_dilation
 from skimage.exposure import cumulative_distribution
 from rembg import remove
+from pathlib import Path
+import tqdm
+import pandas as pd
+from diffusers import StableDiffusionPipeline
+from transformers import pipeline, set_seed
+import cv2
 
 """LOADING MODEL"""
 
@@ -23,7 +29,7 @@ for parameter in vgg.parameters():
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 vgg.to(device)
-
+"""Image lodaer and Unloader"""
 def imageLoader(img,size):
   img_transform = transforms.Compose([
                         transforms.Resize(size),
@@ -263,8 +269,6 @@ def histogram_matching(content_image, style_image):
 
     return result_image
 
-
-
 #high res transfer:
 def high_res_transfer(content_img, style_img1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=25, show_iter=5):
     print("high_res_transfer initiated")
@@ -348,8 +352,44 @@ def high_res_transfer(content_img, style_img1, style_img2=None, alpha=1e0, beta=
     # Save the image as a file
     generated_out_img_hr_pil.save(os.path.join(static_dir,"generated_image_hr.png"))
 
+"""Text to Image generator"""
+# class CFG: 
+#   seed = 42
+#   if torch.cuda.is_available():
+#     device = "cuda"
+#     generator = torch. Generator (device).manual_seed (seed)
+#   else:
+#     device = "cpu"
+#   generator = torch. Generator (device).manual_seed (seed)
+#   image_gen_steps = 1
+#   image_gen_model_id = "stabilityai/stable-diffusion-2"
+#   image_gen_size = (250,250)
+#   image_gen_guidance_scale = 9
+#   prompt_gen_model_id = "gpt3"
+#   prompt_dataset_size = 6
+#   prompt_max_length = 12
+
+# image_gen_model = StableDiffusionPipeline.from_pretrained(
+#     CFG.image_gen_model_id, torch_dtype=torch.float32,
+#     revision="fp16", use_auth_token='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', guidance_scale=9
+# )
+# image_gen_model = image_gen_model.to(CFG.device)
+
+# def generate_style_image(prompt):
+#     image = image_gen_model(
+#         prompt, num_inference_steps=CFG.image_gen_steps,
+#         generator=CFG.generator,
+#         guidance_scale=CFG.image_gen_guidance_scale
+#     ).images[0]
+
+#     image = image.resize(CFG.image_gen_size)
+#     image.save(os.path.join(static_dir,"generated_style_img.jpg"))
+
+
+
+
 #flask app
-from flask import Flask, render_template, request, redirect, url_for,send_file
+from flask import Flask, render_template, request, redirect, url_for,send_file,jsonify
 
 app = Flask(__name__)
 static_dir = os.path.join(app.root_path, 'static')
@@ -362,12 +402,11 @@ def index():
 
         content_image = request.files['content_image']
         style_image1 = request.files['style_image1']
-
-
+        
         content_image = Image.open(content_image).convert('RGB')
         style_image1 = Image.open(style_image1).convert('RGB')
-
-        generated_image = style_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
+       
+        generated_image = style_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
         generated_out_img=imageUnLoader(generated_image)
         
         # Ensure the data type is uint8
@@ -398,6 +437,7 @@ def background_style_transfer():
 
     content_file.save(content_temp_path)
     style_file.save(style_temp_path)
+    # background_img.save(background_img)
 
     # Load uploaded images as PIL Image objects
     content_image = Image.open(content_temp_path).convert('RGB')
@@ -479,13 +519,179 @@ def high_resolution_style_transfer():
         return redirect(url_for('get_generated_image_high_res'))
 
 
+
+@app.route("/second_page", methods=['GET', 'POST'])
+def second_page():
+    if request.method == 'POST':
+        if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
+            return redirect(request.url)
+
+        content_image = request.files['content_image']
+        style_image1 = request.files['style_image1']
+        style_image2 = request.files['style_image2']
+
+        content_image = Image.open(content_image).convert('RGB')
+        style_image1 = Image.open(style_image1).convert('RGB')
+        style_image2 = Image.open(style_image2).convert('RGB')
+
+        # Perform style transfer with two style images for the second page
+        generated_image = style_transfer(content_image, style_image1,style_image2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
+        generated_out_img = imageUnLoader(generated_image)
+
+        # Ensure the data type is uint8
+        generated_out_img = (generated_out_img * 255).astype(np.uint8)
+
+        # Create the PIL Image object
+        generated_out_img_pil = Image.fromarray(generated_out_img)
+
+        generated_out_img_pil.save(os.path.join(static_dir, "generated_image2.jpg"))  # Save generated image
+        return redirect(url_for('get_generated_image2'))
+
+# Change the endpoint function name from background_style_transfer to background_style_transfer2
+
+@app.route('/background_style_transfer2', methods=['POST'])
+def background_style_transfer2():
+    if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
+        return redirect(request.url)
+
+    content_image = request.files['content_image']
+    style_image1 = request.files['style_image1']
+    style_image2 = request.files['style_image2']
+
+    content_image = Image.open(content_image).convert('RGB')
+    style_image1 = Image.open(style_image1).convert('RGB')
+    style_image2 = Image.open(style_image2).convert('RGB')
+
+    # Save uploaded images to temporary files
+    content_temp_path = os.path.join(static_dir, "content_temp.jpg")
+    background_img = os.path.join(static_dir, "output_background_path.png")
+    background_img = Image.open(background_img)
+    content_image.save(content_temp_path)
+    # background_img_path.save(background_img_path)
+
+    # Load uploaded images as PIL Image objects
+    content_image = Image.open(content_temp_path).convert('RGB')
+    # background_img = Image.open(background_img_path)
+
+    # Perform background extraction and style transfer
+    extract_background_foreground(content_temp_path)
+
+    background_style = style_transfer(background_img, style_image1, style_image2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
+    background_style = imageUnLoader(background_style)
+
+    # Ensure the data type is uint8
+    background_style = (background_style * 255).astype(np.uint8)
+    background_style_pil = Image.fromarray(background_style)
+    background_style_pil.save(os.path.join(static_dir, "Styled_Background_image_path2.jpg"))
+
+    # Merge background and foreground images
+    merge_images(os.path.join(static_dir, "Styled_Background_image_path2.jpg"), os.path.join(static_dir, "output_foreground_path.png"))
+    print("got requested imageB2")
+    return redirect(url_for('get_generated_background_image2'))
+
+
+@app.route("/style_transfer_color_preserve2", methods=['POST'])
+def style_transfer_color_preserve2():
+    if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
+        return redirect(request.url)
+
+    content_file = request.files['content_image']
+    style_file1 = request.files['style_image1']
+    style_file2 = request.files['style_image2']
+
+    # Load uploaded images as PIL Image objects
+    content_image = Image.open(content_file).convert('RGB')
+    style_image1 = Image.open(style_file1).convert('RGB')
+    style_image2 = Image.open(style_file2).convert('RGB')
+
+    # Perform color-preserving style transfer
+    generated_style_color_preserve1 = histogram_matching(content_image, style_image1)
+    generated_style_color_preserve2 = histogram_matching(content_image, style_image2)
+    generated_style_color_preserve_pil1 = Image.fromarray(generated_style_color_preserve1)
+    generated_style_color_preserve_pil2 = Image.fromarray(generated_style_color_preserve2)
+
+    style_transfer_color_preserve = style_transfer(content_image, generated_style_color_preserve_pil1, generated_style_color_preserve_pil2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
+    
+    style_transfer_color_preserve = imageUnLoader(style_transfer_color_preserve)
+    
+    # Ensure the data type is uint8
+    style_transfer_color_preserve = (style_transfer_color_preserve * 255).astype(np.uint8)
+    
+    # Create the PIL Image object
+    style_transfer_color_preserve_pil = Image.fromarray(style_transfer_color_preserve)
+    style_transfer_color_preserve_pil.save(os.path.join(static_dir, "style_transfer_color_preserve2.jpg"))  # Save generated image
+    print("got requested image")
+    return redirect(url_for('get_generated_image_color_preserve2'))
+
+@app.route("/high_resolution_style_transfer2", methods=['POST'])
+def high_resolution_style_transfer2():
+        print("high resolution style transfer initiated")
+        if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
+           return redirect(request.url)
+
+        content_image = request.files['content_image']
+        style_image1 = request.files['style_image1']
+        style_image2 = request.files['style_image2']
+
+        # Load uploaded images as PIL Image objects
+        content_image = Image.open(content_file).convert('RGB')
+        style_image1 = Image.open(style_file1).convert('RGB')
+        style_image2 = Image.open(style_file2).convert('RGB')
+
+        generated_image = style_transfer(content_image, style_image1, style_img2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
+        generated_out_img=imageUnLoader(generated_image)
+        
+        # Ensure the data type is uint8
+        generated_out_img = (generated_out_img * 255).astype(np.uint8)
+
+        # Create the PIL Image object
+        generated_out_img_pil = Image.fromarray(generated_out_img)
+
+        generated_out_img_pil.save(os.path.join(static_dir,"generated2.jpg"))
+
+        content_image = Image.open(os.path.join(static_dir,"generated2.jpg")).convert('RGB')
+        hi_res_img=high_res_transfer(content_image, style_image1, style_img2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=20, show_iter=5)
+        return redirect(url_for('get_generated_image_high_res2'))
+
+
+# @app.route('/generate_image', methods=['POST'])
+# def generate_image():
+#     try:
+#         prompt = request.form.get('prompt')
+#         print(prompt)
+#         img = generate_style_image(prompt)
+#         image_path = os.path.join(static_dir, "generated_style_img.jpg")
+#         print("Image path:", image_path)
+#         return redirect(url_for('get_generated_style_image'))
+#     except Exception as e:
+#         print(f"Error in generate_image: {str(e)}")
+
+
+# @app.route('/generated_style_image')
+# def get_generated_style_image():
+#     return send_file(os.path.join(static_dir, "generated_style_img.jpg"), mimetype='image/jpg')
+
+@app.route('/generated_image2')
+def get_generated_image2():
+    return send_file(os.path.join(static_dir, "generated_image2.jpg"), mimetype='image/jpg')
+
+
 @app.route('/generated_image_high_res')
 def get_generated_image_high_res():
     return send_file(os.path.join(static_dir, "generated_image_hr.png"), mimetype='image/png')
 
+@app.route('/generated_image_high_res2')
+def get_generated_image_high_res2():
+    return send_file(os.path.join(static_dir, "generated_image_hr.png"), mimetype='image/png')
+
 @app.route('/generated_image_color_preserve')
 def get_generated_image_color_preserve():
-    return send_file(os.path.join(static_dir, "style_transfer_color_preserve.jpg"), mimetype='image/jpg')   
+    return send_file(os.path.join(static_dir, "style_transfer_color_preserve.jpg"), mimetype='image/jpg') 
+  
+@app.route('/generated_image_color_preserve2')
+def get_generated_image_color_preserve2():
+    return send_file(os.path.join(static_dir, "style_transfer_color_preserve2.jpg"), mimetype='image/jpg')
+
 
 @app.route('/generated_background_image')
 def get_generated_background_image():
@@ -494,6 +700,11 @@ def get_generated_background_image():
 @app.route('/generated_image')
 def get_generated_image():
     return send_file(os.path.join(static_dir,"generated.jpg"), mimetype='image/jpg')
+
+@app.route('/generated_background_image2')
+def get_generated_background_image2():
+    return send_file(os.path.join(static_dir, "final_image.jpg"), mimetype='image/jpg')
+    # return redirect(url_for('get_generated_background_image2'))
 
 if __name__ == "__main__":
     app.run(debug=True)
