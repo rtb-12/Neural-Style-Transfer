@@ -432,20 +432,10 @@ def index():
 
 def background_style_transfer():
     if 'content_image' not in request.files or 'style_image1' not in request.files:
-            return redirect(request.url)
+        return redirect(request.url)
 
-    content_image = request.files['content_image']
-    style_image1 = request.files['style_image1']
-        
-    content_image = Image.open(content_image).convert('RGB')
-    try:
-        style_image1 = Image.open(style_image1).convert('RGB')
-    except Exception as e:
-        # Handle the error, for example, by printing the error message
-        print(f"Error opening style image: {e}")
-        # If an error occurs, you can provide a default image path
-        default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image1 = Image.open(default_image_path).convert('RGB')
+    content_file = request.files['content_image']
+    style_file = request.files['style_image1']
 
     # Save uploaded images to temporary files
     content_temp_path = os.path.join(static_dir,"content_temp.jpg")
@@ -480,20 +470,14 @@ def background_style_transfer():
 @app.route("/style_transfer_color_preserve", methods=['POST'])
 def style_transfer_color_preserve():
     if 'content_image' not in request.files or 'style_image1' not in request.files:
-            return redirect(request.url)
+        return redirect(request.url)
 
-    content_image = request.files['content_image']
-    style_image1 = request.files['style_image1']
-        
-    content_image = Image.open(content_image).convert('RGB')
-    try:
-        style_image1 = Image.open(style_image1).convert('RGB')
-    except Exception as e:
-        # Handle the error, for example, by printing the error message
-        print(f"Error opening style image: {e}")
-        # If an error occurs, you can provide a default image path
-        default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image1 = Image.open(default_image_path).convert('RGB')
+    content_file = request.files['content_image']
+    style_file1 = request.files['style_image1']
+
+    # Load uploaded images as PIL Image objects
+    content_image = Image.open(content_file).convert('RGB')
+    style_image1 = Image.open(style_file1).convert('RGB')
 
     # Perform color-preserving style transfer
     generated_style_color_preserve =histogram_matching(content_image, style_image1)
@@ -521,18 +505,13 @@ def high_resolution_style_transfer():
 
         content_image = request.files['content_image']
         style_image1 = request.files['style_image1']
-        
+
+
         content_image = Image.open(content_image).convert('RGB')
-        try:
-           style_image1 = Image.open(style_image1).convert('RGB')
-        except Exception as e:
-           # Handle the error, for example, by printing the error message
-           print(f"Error opening style image: {e}")
-           # If an error occurs, you can provide a default image path
-           default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-           style_image1 = Image.open(default_image_path).convert('RGB')
-           generated_image = style_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
-           generated_out_img=imageUnLoader(generated_image)
+        style_image1 = Image.open(style_image1).convert('RGB')
+
+        generated_image = style_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
+        generated_out_img=imageUnLoader(generated_image)
         
         # Ensure the data type is uint8
         generated_out_img = (generated_out_img * 255).astype(np.uint8)
@@ -551,32 +530,17 @@ def high_resolution_style_transfer():
 @app.route("/second_page", methods=['GET', 'POST'])
 def second_page():
     if request.method == 'POST':
-        if 'content_image' not in request.files or 'style_image1' not in request.files:
+        if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
             return redirect(request.url)
 
         content_image = request.files['content_image']
         style_image1 = request.files['style_image1']
         style_image2 = request.files['style_image2']
-        
-        content_image = Image.open(content_image).convert('RGB')
-        try:
-            style_image1 = Image.open(style_image1).convert('RGB')
-        except Exception as e:
-            # Handle the error, for example, by printing the error message
-            print(f"Error opening style image: {e}")
-            # If an error occurs, you can provide a default image path
-            default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-            style_image1 = Image.open(default_image_path).convert('RGB')
 
-        try:
-            style_image2 = Image.open(style_image2).convert('RGB')
-        except Exception as e:
-            # Handle the error, for example, by printing the error message
-            print(f"Error opening style image: {e}")
-            # If an error occurs, you can provide a default image path
-            default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-            style_image2 = Image.open(default_image_path).convert('RGB')
-        
+        content_image = Image.open(content_image).convert('RGB')
+        style_image1 = Image.open(style_image1).convert('RGB')
+        style_image2 = Image.open(style_image2).convert('RGB')
+
         # Perform style transfer with two style images for the second page
         generated_image = style_transfer(content_image, style_image1,style_image2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
         generated_out_img = imageUnLoader(generated_image)
@@ -594,30 +558,16 @@ def second_page():
 
 @app.route('/background_style_transfer2', methods=['POST'])
 def background_style_transfer2():
-    if 'content_image' not in request.files or 'style_image1' not in request.files:
-            return redirect(request.url)
+    if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
+        return redirect(request.url)
 
     content_image = request.files['content_image']
     style_image1 = request.files['style_image1']
     style_image2 = request.files['style_image2']
-        
+
     content_image = Image.open(content_image).convert('RGB')
-    try:
-        style_image1 = Image.open(style_image1).convert('RGB')
-    except Exception as e:
-        # Handle the error, for example, by printing the error message
-        print(f"Error opening style image: {e}")
-        # If an error occurs, you can provide a default image path
-        default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image1 = Image.open(default_image_path).convert('RGB')
-    try:
-        style_image2 = Image.open(style_image2).convert('RGB')
-    except Exception as e:
-        # Handle the error, for example, by printing the error message
-        print(f"Error opening style image: {e}")
-        # If an error occurs, you can provide a default image path
-        default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image2 = Image.open(default_image_path).convert('RGB')
+    style_image1 = Image.open(style_image1).convert('RGB')
+    style_image2 = Image.open(style_image2).convert('RGB')
 
     # Save uploaded images to temporary files
     content_temp_path = os.path.join(static_dir, "content_temp.jpg")
@@ -649,30 +599,17 @@ def background_style_transfer2():
 
 @app.route("/style_transfer_color_preserve2", methods=['POST'])
 def style_transfer_color_preserve2():
-    if 'content_image' not in request.files or 'style_image1' not in request.files:
-            return redirect(request.url)
+    if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
+        return redirect(request.url)
 
-    content_image = request.files['content_image']
-    style_image1 = request.files['style_image1']
-    style_image2 = request.files['style_image2']
-        
-    content_image = Image.open(content_image).convert('RGB')
-    try:
-        style_image1 = Image.open(style_image1).convert('RGB')
-    except Exception as e:
-        # Handle the error, for example, by printing the error message
-        print(f"Error opening style image: {e}")
-        # If an error occurs, you can provide a default image path
-        default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image1 = Image.open(default_image_path).convert('RGB')
-    try:
-        style_image2 = Image.open(style_image2).convert('RGB')
-    except Exception as e:
-        # Handle the error, for example, by printing the error message
-        print(f"Error opening style image: {e}")
-        # If an error occurs, you can provide a default image path
-        default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image2 = Image.open(default_image_path).convert('RGB')
+    content_file = request.files['content_image']
+    style_file1 = request.files['style_image1']
+    style_file2 = request.files['style_image2']
+
+    # Load uploaded images as PIL Image objects
+    content_image = Image.open(content_file).convert('RGB')
+    style_image1 = Image.open(style_file1).convert('RGB')
+    style_image2 = Image.open(style_file2).convert('RGB')
 
     # Perform color-preserving style transfer
     generated_style_color_preserve1 = histogram_matching(content_image, style_image1)
@@ -696,33 +633,19 @@ def style_transfer_color_preserve2():
 @app.route("/high_resolution_style_transfer2", methods=['POST'])
 def high_resolution_style_transfer2():
         print("high resolution style transfer initiated")
-        if 'content_image' not in request.files or 'style_image1' not in request.files:
-            return redirect(request.url)
+        if 'content_image' not in request.files or 'style_image1' not in request.files or 'style_image2' not in request.files:
+           return redirect(request.url)
 
         content_image = request.files['content_image']
         style_image1 = request.files['style_image1']
         style_image2 = request.files['style_image2']
-        
-        content_image = Image.open(content_image).convert('RGB')
-        try:
-            style_image1 = Image.open(style_image1).convert('RGB')
-        except Exception as e:
-            # Handle the error, for example, by printing the error message
-            print(f"Error opening style image: {e}")
-            # If an error occurs, you can provide a default image path
-            default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-            style_image1 = Image.open(default_image_path).convert('RGB')
 
-        try:
-            style_image2 = Image.open(style_image2).convert('RGB')
-        except Exception as e:
-            # Handle the error, for example, by printing the error message
-            print(f"Error opening style image: {e}")
-            # If an error occurs, you can provide a default image path
-            default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-            style_image2 = Image.open(default_image_path).convert('RGB')
+        # Load uploaded images as PIL Image objects
+        content_image = Image.open(content_file).convert('RGB')
+        style_image1 = Image.open(style_file1).convert('RGB')
+        style_image2 = Image.open(style_file2).convert('RGB')
 
-        generated_image = style_transfer(content_image, style_image1, style_image2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
+        generated_image = style_transfer(content_image, style_image1, style_img2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
         generated_out_img=imageUnLoader(generated_image)
         
         # Ensure the data type is uint8
@@ -734,7 +657,7 @@ def high_resolution_style_transfer2():
         generated_out_img_pil.save(os.path.join(static_dir,"generated2.jpg"))
 
         content_image = Image.open(os.path.join(static_dir,"generated2.jpg")).convert('RGB')
-        hi_res_img=high_res_transfer(content_image, style_image1, style_image2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=20, show_iter=5)
+        hi_res_img=high_res_transfer(content_image, style_image1, style_img2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=20, show_iter=5)
         return redirect(url_for('get_generated_image_high_res2'))
 
 
@@ -793,5 +716,6 @@ def get_generated_background_image2():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 

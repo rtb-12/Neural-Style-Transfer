@@ -88,6 +88,84 @@ function generateImage(event) {
     });
 }
 
+function generateImage1(event) {
+  console.log("Generating image 1 ...clicked");
+  event.preventDefault(); // Prevent form submission
+  var promptInput = document.getElementById("prompt_input1").value;
+
+  // Validate the prompt to ensure it contains no numbers
+  var promptRegex = /^[^\d]+$/;
+  if (!promptRegex.test(promptInput)) {
+    alert("Please enter a prompt without numbers.");
+    return;
+  }
+
+  // Create the request object
+  fetch("/generate_image", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    },
+    body: "prompt=" + encodeURIComponent(promptInput),
+  })
+    .then((response) => {
+      if (response.status === 200) {
+        // Fetch the generated image directly
+        return fetch("/generated_style_image");
+      } else {
+        throw new Error("An error occurred while generating the image.");
+      }
+    })
+    .then((response) => {
+      if (response && response.ok) {
+        document.getElementById("styleImageDisplay1").src =
+          "/generated_style_image";
+      }
+    })
+    .catch((error) => {
+      alert(error.message);
+    });
+}
+
+function generateImage2(event) {
+  console.log("Generating image 2...clicked");
+  event.preventDefault(); // Prevent form submission
+  var promptInput = document.getElementById("prompt_input2").value;
+
+  // Validate the prompt to ensure it contains no numbers
+  var promptRegex = /^[^\d]+$/;
+  if (!promptRegex.test(promptInput)) {
+    alert("Please enter a prompt without numbers.");
+    return;
+  }
+
+  // Create the request object
+  fetch("/generate_image", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    },
+    body: "prompt=" + encodeURIComponent(promptInput),
+  })
+    .then((response) => {
+      if (response.status === 200) {
+        // Fetch the generated image directly
+        return fetch("/generated_style_image");
+      } else {
+        throw new Error("An error occurred while generating the image.");
+      }
+    })
+    .then((response) => {
+      if (response && response.ok) {
+        document.getElementById("styleImageDisplay2").src =
+          "/generated_style_image";
+      }
+    })
+    .catch((error) => {
+      alert(error.message);
+    });
+}
+
 function startStyleTransfer(event) {
   console.log("StyleTransfer Started");
   event.preventDefault(); // Prevent form submission

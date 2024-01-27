@@ -26,7 +26,7 @@
                 </div>
                 <div class="styleimage">
                   <h2>Style Image</h2>
-                  <input type="file" id="styleImageInput" accept="image/*" name="style_image1" />
+                  <input type="file" id="styleImageInput" accept="image/*" name="style_image" />
                   <img id="styleImageDisplay" src="" alt="style image" />
                   <div class="container">
                     <input required="" type="text" name="text" class="input" id="prompt_input" />
@@ -222,11 +222,11 @@
                   <input type="file" id="styleImageInput1" accept="image/*" name="style_image1" />
                   <img id="styleImageDisplay1" src="" alt="style image" />
                   <div class="container">
-                    <input required="" type="text" name="text" class="input" />
+                    <input required="" type="text" name="text" class="input" id="prompt_input1" />
                     <label class="label">Enter your prompt</label>
                     <div class="sp">
 
-                      <button class="sparkle-button">
+                      <button class="sparkle-button" onclick="generateImage1(event)">
                         <span class="spark"></span>
 
                         <span class="backdrop"></span>
@@ -343,11 +343,11 @@
                   <input type="file" id="styleImageInput2" accept="image/*" name="style_image2" />
                   <img id="styleImageDisplay2" src="" alt="style image" />
                   <div class="container">
-                    <input required="" type="text" name="text" class="input" />
+                    <input required="" type="text" name="text" class="input" id="prompt_input2" />
                     <label class="label">Enter your prompt</label>
                     <div class="sp">
 
-                      <button class="sparkle-button">
+                      <button class="sparkle-button" onclick="generateImage2(event)">
                         <span class="spark"></span>
 
                         <span class="backdrop"></span>
