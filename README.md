@@ -62,6 +62,7 @@ Here then go to > App folder > Run `main.py `
 * **Neural Style Transfer:**
 ![generated_image (2) (1)](https://hackmd.io/_uploads/HkOqzAQcT.png)
 * **Color Preserving Style Transfer :**
+  
 ![generated_image (3)](https://hackmd.io/_uploads/Bk81XCQ9p.png)
 
 * **Background only Style Transfer :**
