@@ -51,7 +51,7 @@ then
 ```
 cd Neural-Style-Transfer
 ```
-Now create a models folder in this directory and paste the models file there which can be downloaded from the following link:
+Now create a `Models` folder in this directory and paste the models file there which can be downloaded from the following link:
 [https://drive.google.com/drive/folders/15OVwtPRnxwxZwKD6qPrKo6RbfsPt-lhA?usp=sharing](https://drive.google.com/drive/folders/15OVwtPRnxwxZwKD6qPrKo6RbfsPt-lhA?usp=sharing)
 
 NOTE : For Text to image generation one requires a hugging face auth token which can be generated on hugging face webiste and then paste it the code where auth token is written (Currently on auth token is already there for testing purposes and will be soon removed)
@@ -68,6 +68,7 @@ Here then go to > App folder > Run `main.py `
 ![CONTENT                        STYLE](https://hackmd.io/_uploads/BJc6KZN5p.jpg)
 
 Generated Image:
+
 ![final_image](https://hackmd.io/_uploads/HkPNQWN5a.png)
 
 * **High Resolution Style Transfer :**
@@ -75,6 +76,7 @@ Generated Image:
 * **Mixed Style Transfer :**
 ![CONTENT            STYLE1             STYLE2](https://hackmd.io/_uploads/ryCDXb456.jpg)
 Generated Image:
+
 ![MNST](https://hackmd.io/_uploads/HJDAKk496.png)
 
 
