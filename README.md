@@ -50,6 +50,8 @@ then
 ```
 cd Neural-Style-Transfer
 ```
+Now create a models folder in this directory and paste the models file there which can be downloaded from the following link:
+[https://drive.google.com/drive/folders/15OVwtPRnxwxZwKD6qPrKo6RbfsPt-lhA?usp=sharing](https://drive.google.com/drive/folders/15OVwtPRnxwxZwKD6qPrKo6RbfsPt-lhA?usp=sharing)
 
 Here then go to > App folder > Run `main.py `
 
