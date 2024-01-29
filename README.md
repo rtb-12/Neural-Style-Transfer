@@ -20,6 +20,8 @@ In addition to this there is also a text to image generator that will be used st
 
 ## website Demo 
 ![Screenshot 2024-01-28 170621](https://github.com/rtb-12/Neural-Style-Transfer/assets/147048280/68e5f0e4-6442-43da-a11a-4e99649c857b)
+![Screenshot 2024-01-29 211154](https://github.com/rtb-12/Neural-Style-Transfer/assets/147048280/bb1c0b15-c640-473c-ad2c-aa25d53cdc68)
+![Screenshot 2024-01-29 205410](https://github.com/rtb-12/Neural-Style-Transfer/assets/147048280/e95cc88b-7ca8-40a2-aaa6-f3a1d0c69fe5)
 
 
 ## Installation
