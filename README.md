@@ -79,6 +79,7 @@ Generated Image:
 
 
 ### One can Follow the following report for more understanding of the model implemented in the lab:
+[https://hackmd.io/@nZL7vfaUTsqsyyZrlF9LXw/S1bx76756](https://hackmd.io/@nZL7vfaUTsqsyyZrlF9LXw/S1bx76756)
 
 
 
