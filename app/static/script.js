@@ -140,7 +140,7 @@ function generateImage2(event) {
   }
 
   // Create the request object
-  fetch("/generate_image", {
+  fetch("/generate_image2", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -150,7 +150,7 @@ function generateImage2(event) {
     .then((response) => {
       if (response.status === 200) {
         // Fetch the generated image directly
-        return fetch("/generated_style_image");
+        return fetch("/generated_style_image2");
       } else {
         throw new Error("An error occurred while generating the image.");
       }
@@ -158,7 +158,7 @@ function generateImage2(event) {
     .then((response) => {
       if (response && response.ok) {
         document.getElementById("styleImageDisplay2").src =
-          "/generated_style_image";
+          "/generated_style_image2";
       }
     })
     .catch((error) => {

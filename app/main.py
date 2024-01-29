@@ -397,23 +397,23 @@ static_dir = os.path.join(app.root_path, 'static')
 @app.route("/", methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        if 'content_image' not in request.files or 'style_image1' not in request.files:
+        if 'content_image' not in request.files or 'style_image' not in request.files:
             return redirect(request.url)
 
         content_image = request.files['content_image']
-        style_image1 = request.files['style_image1']
+        style_image = request.files['style_image']
         
         content_image = Image.open(content_image).convert('RGB')
         try:
-            style_image1 = Image.open(style_image1).convert('RGB')
+            style_image= Image.open(style_image).convert('RGB')
         except Exception as e:
             # Handle the error, for example, by printing the error message
             print(f"Error opening style image: {e}")
             # If an error occurs, you can provide a default image path
             default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-            style_image1 = Image.open(default_image_path).convert('RGB')
+            style_image = Image.open(default_image_path).convert('RGB')
        
-        generated_image = style_transfer(content_image, style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
+        generated_image = style_transfer(content_image, style_image, style_img2=None, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
         generated_out_img=imageUnLoader(generated_image)
         
         # Ensure the data type is uint8
@@ -431,40 +431,36 @@ def index():
 @app.route('/background_style_transfer', methods=['POST'])
 
 def background_style_transfer():
-    if 'content_image' not in request.files or 'style_image1' not in request.files:
+    if 'content_image' not in request.files or 'style_image' not in request.files:
             return redirect(request.url)
 
     content_image = request.files['content_image']
-    style_image1 = request.files['style_image1']
-        
+    style_image = request.files['style_image']
+
+    # Save uploaded images to temporary files
+    content_temp_path = os.path.join(static_dir,"content_temp.jpg")
+    style_temp_path = os.path.join(static_dir,"style_temp.jpg")
+    background_img_path=os.path.join(static_dir,"output_background_path.png")
+
+    content_image.save(content_temp_path)
+    style_image.save(style_temp_path)
+    
     content_image = Image.open(content_image).convert('RGB')
     try:
-        style_image1 = Image.open(style_image1).convert('RGB')
+        style_image = Image.open(style_image).convert('RGB')
     except Exception as e:
         # Handle the error, for example, by printing the error message
         print(f"Error opening style image: {e}")
         # If an error occurs, you can provide a default image path
         default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image1 = Image.open(default_image_path).convert('RGB')
-
-    # Save uploaded images to temporary files
-    content_temp_path = os.path.join(static_dir,"content_temp.jpg")
-    style_temp_path = os.path.join(static_dir,"style_temp.jpg")
-    background_img=os.path.join(static_dir,"output_background_path.png")
-
-    content_file.save(content_temp_path)
-    style_file.save(style_temp_path)
-    # background_img.save(background_img)
-
-    # Load uploaded images as PIL Image objects
-    content_image = Image.open(content_temp_path).convert('RGB')
-    style_image1 = Image.open(style_temp_path).convert('RGB')
-    background_img = Image.open(background_img)
+        style_image = Image.open(default_image_path).convert('RGB')
 
     # Perform background extraction and style transfer
     extract_background_foreground(content_temp_path)
+    background_img_path=os.path.join(static_dir,"output_background_path.png")
+    background_img = Image.open(background_img_path)
     
-    background_style=style_transfer(background_img,style_image1, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
+    background_style=style_transfer(background_img,style_image, style_img2=None, alpha=1e0, beta=1e6, gamma=0, num_of_steps=200, show_iter=50)
     background_style=imageUnLoader(background_style)
     # Ensure the data type is uint8
     background_style = (background_style * 255).astype(np.uint8)
@@ -479,21 +475,21 @@ def background_style_transfer():
 
 @app.route("/style_transfer_color_preserve", methods=['POST'])
 def style_transfer_color_preserve():
-    if 'content_image' not in request.files or 'style_image1' not in request.files:
+    if 'content_image' not in request.files or 'style_image' not in request.files:
             return redirect(request.url)
 
     content_image = request.files['content_image']
-    style_image1 = request.files['style_image1']
+    style_image = request.files['style_image']
         
     content_image = Image.open(content_image).convert('RGB')
     try:
-        style_image1 = Image.open(style_image1).convert('RGB')
+        style_image = Image.open(style_image).convert('RGB')
     except Exception as e:
         # Handle the error, for example, by printing the error message
         print(f"Error opening style image: {e}")
         # If an error occurs, you can provide a default image path
         default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
-        style_image1 = Image.open(default_image_path).convert('RGB')
+        style_image = Image.open(default_image_path).convert('RGB')
 
     # Perform color-preserving style transfer
     generated_style_color_preserve =histogram_matching(content_image, style_image1)
@@ -516,15 +512,15 @@ def style_transfer_color_preserve():
 @app.route("/high_resolution_style_transfer", methods=['POST'])
 def high_resolution_style_transfer():
         print("high resolution style transfer initiated")
-        if 'content_image' not in request.files or 'style_image1' not in request.files:
+        if 'content_image' not in request.files or 'style_image' not in request.files:
             return redirect(request.url)
 
         content_image = request.files['content_image']
-        style_image1 = request.files['style_image1']
+        style_image = request.files['style_image1']
         
         content_image = Image.open(content_image).convert('RGB')
         try:
-           style_image1 = Image.open(style_image1).convert('RGB')
+           style_image = Image.open(style_image).convert('RGB')
         except Exception as e:
            # Handle the error, for example, by printing the error message
            print(f"Error opening style image: {e}")
@@ -551,7 +547,7 @@ def high_resolution_style_transfer():
 @app.route("/second_page", methods=['GET', 'POST'])
 def second_page():
     if request.method == 'POST':
-        if 'content_image' not in request.files or 'style_image1' not in request.files:
+        if 'content_image' not in request.files or 'style_image1' or 'style_image2' not in request.files:
             return redirect(request.url)
 
         content_image = request.files['content_image']
@@ -574,7 +570,7 @@ def second_page():
             # Handle the error, for example, by printing the error message
             print(f"Error opening style image: {e}")
             # If an error occurs, you can provide a default image path
-            default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
+            default_image_path = os.path.join(static_dir, "generated_style_img2.jpg")
             style_image2 = Image.open(default_image_path).convert('RGB')
         
         # Perform style transfer with two style images for the second page
@@ -594,7 +590,7 @@ def second_page():
 
 @app.route('/background_style_transfer2', methods=['POST'])
 def background_style_transfer2():
-    if 'content_image' not in request.files or 'style_image1' not in request.files:
+    if 'content_image' not in request.files or 'style_image1'or 'style_image2' not in request.files:
             return redirect(request.url)
 
     content_image = request.files['content_image']
@@ -610,6 +606,7 @@ def background_style_transfer2():
         # If an error occurs, you can provide a default image path
         default_image_path = os.path.join(static_dir, "generated_style_img.jpg")
         style_image1 = Image.open(default_image_path).convert('RGB')
+
     try:
         style_image2 = Image.open(style_image2).convert('RGB')
     except Exception as e:
@@ -621,7 +618,7 @@ def background_style_transfer2():
 
     # Save uploaded images to temporary files
     content_temp_path = os.path.join(static_dir, "content_temp.jpg")
-    background_img = os.path.join(static_dir, "output_background_path.png")
+    background_img_path = os.path.join(static_dir, "output_background_path.png")
     background_img = Image.open(background_img)
     content_image.save(content_temp_path)
     # background_img_path.save(background_img_path)
@@ -632,6 +629,9 @@ def background_style_transfer2():
 
     # Perform background extraction and style transfer
     extract_background_foreground(content_temp_path)
+
+    background_img_path = os.path.join(static_dir, "output_background_path.png")
+    background_img = Image.open(background_img)
 
     background_style = style_transfer(background_img, style_image1, style_image2, alpha=1e0, beta=1e6, gamma=0.25, num_of_steps=200, show_iter=50)
     background_style = imageUnLoader(background_style)
@@ -755,6 +755,23 @@ def generate_image():
 @app.route('/generated_style_image')
 def get_generated_style_image():
     return send_file(os.path.join(static_dir, "generated_style_img.jpg"), mimetype='image/jpg')
+
+@app.route('/generate_image2', methods=['POST'])
+def generate_image2():
+    try:
+        prompt = request.form.get('prompt')
+        print(prompt)
+        img = generate_style_image(prompt)
+        image_path = os.path.join(static_dir, "generated_style_img2.jpg")
+        img.save(image_path)
+        print("image generated and saved to ,",image_path)
+        return redirect(url_for('get_generated_style_image2'))
+    except Exception as e:
+        print(f"Error in generate_image: {str(e)}")
+
+@app.route('/generated_style_image2')
+def get_generated_style_image2():
+    return send_file(os.path.join(static_dir, "generated_style_img2.jpg"), mimetype='image/jpg')
 
 @app.route('/generated_image2')
 def get_generated_image2():

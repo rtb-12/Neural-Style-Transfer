@@ -5,6 +5,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Neural Style Transfer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='loco.css') }}" />
+  <link rel="stylesheet" href="https://unpkg.com/sheryjs/dist/Shery.css" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 
@@ -464,25 +466,25 @@
               </div>
 
               <div class="buttons">
-                <input type="submit" value="Style Transfer on Image" onclick="startStyleTransfer2(event);showLoading()"
+                <input type="submit" value="Style Transfer on Image" onclick="startStyleTransfer2(event);showLoading2()"
                   class="shadow__btn" />
 
                 <input type="submit" value="Style Transfer on background"
-                  onclick="startBackgroundStyleTransfer2(event);showLoading()" class="shadow__btn" />
+                  onclick="startBackgroundStyleTransfer2(event);showLoading2()" class="shadow__btn" />
 
                 <input type="submit" value="Style Transfer on Image preserving color"
-                  onclick="startStyleTransferColorPreserve2(event);showLoading()" class="shadow__btn" />
+                  onclick="startStyleTransferColorPreserve2(event);showLoading2()" class="shadow__btn" />
 
                 <input type="submit" value="High Resolution Transfer"
-                  onclick="startStyleTransferHighRes2(event);showLoading()" class="shadow__btn" />
+                  onclick="startStyleTransferHighRes2(event);showLoading2()" class="shadow__btn" />
               </div>
             </div>
           </form>
         </div>
         <div class="generatedimage">
           <h2>Generated Image</h2>
-          <img id="generatedImageDisplay2" src="" alt="generated image" onload="hideLoading()" />
-          <div class="loader">
+          <img id="generatedImageDisplay2" src="" alt="generated image" onload="hideLoading2()" />
+          <div class="loader2">
             <div class="box box0">
               <div></div>
             </div>
@@ -515,7 +517,17 @@
       </div>
     </div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/locomotive-scroll@3.5.4/dist/locomotive-scroll.min.js"></script>
+  <script type="text/javascript" src="Shery.js"></script>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.155.0/three.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/gh/automat/controlkit.js@master/bin/controlKit.min.js"></script>
+  <script type="text/javascript" src="https://unpkg.com/sheryjs/dist/Shery.js"></script>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 
