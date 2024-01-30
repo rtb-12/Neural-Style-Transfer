@@ -83,6 +83,14 @@ Generated Image:
 ![MNST](https://hackmd.io/_uploads/HJDAKk496.png)
 
 
+### NOTE:
+Currently the number of steps for image generation from prompt is kept :10 
+for style transfer :200(size of one dimension of image :256)
+and for hig res transfer :25 (size of one dimension of image:1024)
+these are kept less for testing on low end laptop but can be modified in code as required based on the hardware of the device.
+
+
+
 ### One can Follow the following report for more understanding of the model implemented in the lab:
 [https://hackmd.io/@nZL7vfaUTsqsyyZrlF9LXw/S1bx76756](https://hackmd.io/@nZL7vfaUTsqsyyZrlF9LXw/S1bx76756)
 
